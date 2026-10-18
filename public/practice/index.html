@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Practice Mistakes — QuizCraft AI</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 50%, #eef2ff 100%);
+      color: #1e293b;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 820px; margin: 0 auto; padding: 32px 20px 64px; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+    h1 { font-size: 28px; margin: 0; }
+    .sub { color: #64748b; margin: 4px 0 0; }
+    .btn {
+      border: none; cursor: pointer; border-radius: 10px; padding: 10px 18px;
+      font-size: 14px; font-weight: 600; color: #fff;
+      background: linear-gradient(90deg, #2563eb, #4f46e5);
+    }
+    .btn:hover { filter: brightness(1.05); }
+    .btn.ghost { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .card {
+      background: rgba(255,255,255,.85); border: 1px solid rgba(148,163,184,.3);
+      border-radius: 16px; padding: 20px; margin-bottom: 14px;
+      box-shadow: 0 6px 24px rgba(15,23,42,.05);
+    }
+    .q { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
+    .meta { font-size: 12px; color: #64748b; }
+    .pill { display: inline-block; background: #fee2e2; color: #b91c1c; border-radius: 999px;
+            padding: 2px 10px; font-size: 12px; font-weight: 600; margin-left: 8px; }
+    .opt {
+      display: block; width: 100%; text-align: left; cursor: pointer;
+      border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+      background: #fff; font-size: 15px; transition: all .15s;
+    }
+    .opt:hover { background: #f1f5f9; }
+    .opt.correct { background: #ecfdf5; border-color: #34d399; color: #065f46; }
+    .opt.wrong { background: #fef2f2; border-color: #f87171; color: #991b1b; }
+    .opt:disabled { cursor: default; }
+    .progress { height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; margin: 14px 0 22px; }
+    .progress > div { height: 100%; background: linear-gradient(90deg,#2563eb,#4f46e5); transition: width .25s; }
+    .empty { text-align: center; padding: 60px 20px; color: #64748b; }
+    .empty h2 { color: #334155; margin: 12px 0 6px; }
+    .actions { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; gap: 12px; }
+    .score { font-size: 18px; font-weight: 700; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Practice Mistakes</h1>
+        <p class="sub">Re-attempt the questions you previously got wrong. Correct answers are removed automatically.</p>
+      </div>
+      <button class="btn ghost" onclick="location.href='/'">← Back to Dashboard</button>
+    </header>
+
+    <div id="loading" class="empty">Loading your mistakes…</div>
+
+    <div id="emptyState" class="empty hidden">
+      <h2>No mistakes to practice 🎉</h2>
+      <p>Take a quiz from the dashboard — any question you miss will show up here.</p>
+    </div>
+
+    <div id="listState" class="hidden">
+      <div id="list"></div>
+      <div style="margin-top:18px; text-align:center;">
+        <button class="btn" id="startBtn">Start Practicing</button>
+      </div>
+    </div>
+
+    <div id="practiceState" class="hidden">
+      <div class="progress"><div id="bar" style="width:0%"></div></div>
+      <div class="card">
+        <p class="meta" id="counter"></p>
+        <p class="q" id="pq"></p>
+        <div id="options"></div>
+        <div class="actions">
+          <button class="btn ghost" id="quitBtn">Quit &amp; Save Progress</button>
+          <button class="btn" id="checkBtn" disabled>Check Answer</button>
+        </div>
+        <p class="meta" id="feedback" style="margin-top:12px;"></p>
+      </div>
+    </div>
+
+    <div id="doneState" class="empty hidden">
+      <h2>Practice complete!</h2>
+      <p id="doneText"></p>
+      <button class="btn" onclick="location.reload()">Refresh</button>
+    </div>
+  </div>
+
+  <script>
+    const API = "http://localhost:8000/api/v1/mistakes";
+    const PROGRESS_KEY = "practice-progress";
+
+    const getUserId = () => {
+      let id = localStorage.getItem("study-helper-uid");
+      if (!id) {
+        id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random().toString(36).slice(2));
+        localStorage.setItem("study-helper-uid", id);
+      }
+      return id;
+    };
+    const uid = getUserId();
+    const headers = { "Content-Type": "application/json", "x-user-id": uid };
+
+    let mistakes = [];
+    let session = [];
+
+    const $ = (id) => document.getElementById(id);
+
+    function shuffle(arr) {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // Build shuffled options with a remapped correct index.
+    function shuffledOptions(m) {
+      const opts = [m.option1, m.option2, m.option3, m.option4];
+      const correctText = opts[m.correctOption - 1];
+      const order = shuffle([0, 1, 2, 3]);
+      return {
+        texts: order.map((k) => opts[k]),
+        correctIndex: order.indexOf(m.correctOption - 1),
+      };
+    }
+
+    function saveProgress() {
+      localStorage.setItem(PROGRESS_KEY, JSON.stringify(session));
+    }
+    function loadProgress() {
+      try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)); } catch { return null; }
+    }
+    function clearProgress() {
+      localStorage.removeItem(PROGRESS_KEY);
+    }
+
+    async function loadMistakes() {
+      const res = await fetch(API, { headers });
+      if (!res.ok) throw new Error("Failed to load mistakes");
+      const data = await res.json();
+      mistakes = data.data || [];
+    }
+
+    function renderList() {
+      const list = $("list");
+      list.innerHTML = "";
+      mistakes.forEach((m) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <p class="q">${escapeHtml(m.question)}<span class="pill">missed ${m.wrongCount}×</span></p>
+          <p class="meta">Last missed: ${new Date(m.lastWrongAt).toLocaleString()}</p>
+        `;
+        list.appendChild(card);
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    let idx = 0;
+    let current = null;
+    let currentOpts = null;
+    let selected = null;
+    let answered = false;
+    let results = [];
+
+    function startPractice() {
+      const saved = loadProgress();
+      if (saved && saved.length && confirm("Resume your previous practice session?")) {
+        session = saved;
+      } else {
+        clearProgress();
+        session = shuffle(mistakes).map((m) => m._id);
+      }
+      idx = 0;
+      $("listState").classList.add("hidden");
+      $("practiceState").classList.remove("hidden");
+      showQuestion();
+    }
+
+    function showQuestion() {
+      const id = session[idx];
+      current = mistakes.find((m) => m._id === id);
+      if (!current) { finish(); return; }
+      currentOpts = shuffledOptions(current);
+      selected = null;
+      answered = false;
+
+      $("bar").style.width = (idx / session.length * 100) + "%";
+      $("counter").textContent = `Question ${idx + 1} of ${session.length} · missed ${current.wrongCount}×`;
+      $("pq").textContent = current.question;
+      $("feedback").textContent = "";
+      $("checkBtn").disabled = true;
+
+      const box = $("options");
+      box.innerHTML = "";
+      currentOpts.texts.forEach((text, i) => {
+        const b = document.createElement("button");
+        b.className = "opt";
+        b.textContent = text;
+        b.onclick = () => {
+          if (answered) return;
+          selected = i;
+          [...box.children].forEach((c) => c.classList.remove("correct", "wrong"));
+          b.style.borderColor = "#2563eb";
+          $("checkBtn").disabled = false;
+        };
+        box.appendChild(b);
+      });
+    }
+
+    async function checkAnswer() {
+      if (selected === null || answered) return;
+      answered = true;
+      const isCorrect = selected === currentOpts.correctIndex;
+      const btns = $("options").children;
+      btns[currentOpts.correctIndex].classList.add("correct");
+      if (!isCorrect) btns[selected].classList.add("wrong");
+      [...btns].forEach((b) => (b.disabled = true));
+      $("feedback").textContent = isCorrect
+        ? "Correct! This question will be removed from your practice list."
+        : "Not quite — the correct answer is highlighted.";
+      results.push({ id: current._id, isCorrect });
+
+      if (isCorrect) {
+        await fetch(API + "/resolve", { method: "POST", headers, body: JSON.stringify({ mistakeId: current._id }) }).catch(() => {});
+      } else {
+        await fetch(API, {
+          method: "POST", headers,
+          body: JSON.stringify({
+            quizId: current.quizId,
+            questions: [{
+              question: current.question, option1: current.option1, option2: current.option2,
+              option3: current.option3, option4: current.option4,
+              correctOption: current.correctOption, selectedOption: selected + 1,
+            }],
+          }),
+        }).catch(() => {});
+      }
+      $("checkBtn").textContent = idx === session.length - 1 ? "Finish" : "Next";
+      $("checkBtn").onclick = next;
+    }
+
+    function next() {
+      $("checkBtn").textContent = "Check Answer";
+      $("checkBtn").onclick = checkAnswer;
+      idx++;
+      if (idx >= session.length) { finish(); return; }
+      saveProgress();
+      showQuestion();
+    }
+
+    function finish() {
+      clearProgress();
+      $("practiceState").classList.add("hidden");
+      $("doneState").classList.remove("hidden");
+      const correct = results.filter((r) => r.isCorrect).length;
+      $("doneText").textContent = `You answered ${correct} of ${results.length} correctly.`;
+    }
+
+    $("startBtn").onclick = startPractice;
+    $("checkBtn").onclick = checkAnswer;
+    $("quitBtn").onclick = () => { saveProgress(); location.reload(); };
+
+    (async function init() {
+      try {
+        await loadMistakes();
+      } catch (e) {
+        $("loading").textContent = "Could not reach the server. Is it running on localhost:8000?";
+        return;
+      }
+      $("loading").classList.add("hidden");
+      if (!mistakes.length) {
+        $("emptyState").classList.remove("hidden");
+        return;
+      }
+      renderList();
+      $("listState").classList.remove("hidden");
+    })();
+  </script>
+</body>
+</html>
