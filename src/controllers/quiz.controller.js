@@ -76,13 +76,15 @@ const createNewQuizByText = asyncHandler(async (req, res) => {
         title: Joi.string().required(),
         text: Joi.string().required(),
         subject: Joi.string().required(),
+        numberOfQuestions: Joi.number().integer().min(1).max(500).optional(),
     })
     const { error } = schema.validate(req.body)
     if (error) {
         throw new ApiError(400, error.details[0].message)
     }
     const { title, subject, text } = req.body
-    const mcqs = await getMcqs(text)
+    const numberOfQuestions = req.body.numberOfQuestions ?? 100
+    const mcqs = await getMcqs(text, numberOfQuestions)
     const createdQuiz = await Quiz.create({
         title,
         subject,
@@ -102,7 +104,8 @@ const addNewQuestionsOnTheQuiz = asyncHandler(async (req, res) => {
     if (!getQuizInfo) {
         throw new ApiError(400, "the quiz doesnot exists")
     }
-    let mcqs = await getMcqs(getQuizInfo.text + "\n please make a bit harder quiz this time")
+    const numberOfQuestions = Number(req.body?.numberOfQuestions) || 20
+    let mcqs = await getMcqs(getQuizInfo.text + "\n please make a bit harder quiz this time", numberOfQuestions)
     mcqs = await Quiz.findByIdAndUpdate(quizId, {
         $push: {
             quizes: {
