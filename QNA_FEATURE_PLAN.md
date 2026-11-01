@@ -162,16 +162,18 @@ Accessibility: large tap targets, mobile-friendly (reuse responsive CSS from pra
 
 Estimated: 2-3 focused sessions.
 
-## 10. Open questions
+## 10. Open questions (resolved)
 
-1. **Ownership:** should Q&A sets be per-user (default yes) or global like MCQ quizzes?
-   (Recommend per-user, matching mistakes; AI-generated sets stay private.)
-2. **Attempts/history:** store every graded answer (default yes) or ephemeral?
-3. **Editing:** allow editing a question/answer after creation (default yes, simple PUT)?
-4. **Speech language:** default `en-US`; make configurable? (default fixed en-US)
-5. **Scoring strictness:** lenient (conceptual) default; confirm tolerance level.
-6. **Main dashboard integration:** frontend source is not in repo, so the new page
-   will be standalone (`/qna`) reachable via direct URL / links from `practice`. OK?
+1. **Ownership:** GLOBAL/SHARED (like MCQ quizzes). Implemented: sets have no owner; anyone can read/edit/delete.
+2. **Attempts/history:** STORED. Implemented `QnAAttempt` collection, per `x-user-id`.
+3. **Editing:** YES. Implemented `PUT /:id` replacing title/subject/questions.
+4. **Speech language:** fixed `en-US`.
+5. **Scoring strictness:** lenient conceptual grading with typo/ASR tolerance. Verified.
+6. **Main dashboard integration:** standalone `/qna` page (frontend source not in repo).
+
+### Implementation status
+- Phase 1 (backend + standalone page): DONE and pushed (commit 131af76).
+- Phase 2+ (links, polish): optional follow-up.
 
 ## 11. Risks
 
