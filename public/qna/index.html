@@ -61,6 +61,7 @@
         <p class="sub">Open-ended questions. Type or speak your answer; AI scores it out of 10.</p>
       </div>
       <button class="btn ghost" onclick="location.href='/'">← Dashboard</button>
+      <button class="btn ghost" onclick="location.href='/practice'">Practice Mistakes →</button>
     </header>
 
     <div id="loading" class="empty">Loading…</div>
@@ -148,6 +149,17 @@
       </div>
     </div>
 
+    <!-- HISTORY MODAL -->
+    <div id="historyModal" class="hidden" style="position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;">
+      <div style="background:#fff;border-radius:16px;max-width:700px;width:100%;max-height:80vh;overflow:auto;padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h2 id="historyTitle" style="margin:0;font-size:18px;">History</h2>
+          <button class="btn ghost" id="closeHistoryBtn">Close</button>
+        </div>
+        <div id="historyList"></div>
+      </div>
+    </div>
+
     <!-- DONE VIEW -->
     <div id="doneView" class="hidden" class="empty">
       <div class="card" style="text-align:center;">
@@ -202,6 +214,7 @@
           <div class="actions">
             <button class="btn" data-act="practice" data-id="${s._id}">Practice</button>
             <button class="btn ghost" data-act="edit" data-id="${s._id}">Edit</button>
+            <button class="btn ghost" data-act="history" data-id="${s._id}">History</button>
             <button class="btn danger" data-act="delete" data-id="${s._id}">Delete</button>
           </div>
         `;
@@ -212,6 +225,7 @@
           const id = b.dataset.id;
           if (b.dataset.act === "practice") startPractice(id);
           if (b.dataset.act === "edit") openEdit(id);
+          if (b.dataset.act === "history") showHistory(id);
           if (b.dataset.act === "delete") deleteSet(id);
         };
       });
@@ -222,6 +236,33 @@
       await fetch(API + "/" + id, { method: "DELETE" });
       await loadSets();
       renderSets();
+    }
+
+    async function showHistory(id) {
+      const set = sets.find((s) => s._id === id);
+      $("historyTitle").textContent = (set ? set.title : "Set") + " — Attempts";
+      $("historyList").innerHTML = "<p class='empty'>Loading…</p>";
+      $("historyModal").classList.remove("hidden");
+      try {
+        const res = await fetch(API + "/" + id + "/attempts", { headers: authHeaders });
+        const data = await res.json();
+        const attempts = data.data || [];
+        if (!attempts.length) {
+          $("historyList").innerHTML = "<p class='empty'>No attempts yet.</p>";
+          return;
+        }
+        $("historyList").innerHTML = attempts.map((a) => `
+          <div class="card" style="margin-bottom:8px;">
+            <p class="q">${escapeHtml(a.question)}</p>
+            <p class="meta">Score: ${a.score === null ? "—" : a.score}/10 · ${new Date(a.createdAt).toLocaleString()}</p>
+            <p style="margin:6px 0;">${escapeHtml(a.userAnswer)}</p>
+            ${a.missing && a.missing.length ? `<p class="meta">Missing: ${a.missing.map(escapeHtml).join(", ")}</p>` : ""}
+            ${a.feedback ? `<p class="feedback">${escapeHtml(a.feedback)}</p>` : ""}
+          </div>
+        `).join("");
+      } catch (e) {
+        $("historyList").innerHTML = "<p class='empty'>Could not load attempts.</p>";
+      }
     }
 
     // ---- form ----
@@ -420,6 +461,7 @@
     $("saveSetBtn").onclick = saveSet;
     $("submitBtn").onclick = submitAnswer;
     $("nextBtn").onclick = nextQuestion;
+    $("closeHistoryBtn").onclick = () => $("historyModal").classList.add("hidden");
     $("quitPracticeBtn").onclick = () => {
       $("practiceView").classList.add("hidden");
       $("listView").classList.remove("hidden");
