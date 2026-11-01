@@ -86,12 +86,13 @@ const callDeepSeek = async ({ prompt, system }) => {
   }
 };
 
-const handleIndividualPrompt = async (prompt) => {
+const handleIndividualPrompt = async (prompt, options = {}) => {
+  const system = options?.system;
   let lastError;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
     try {
-      return await callDeepSeek({ prompt });
+      return await callDeepSeek({ prompt, system });
     } catch (err) {
       lastError = err;
       const canRetry = attempt < MAX_RETRIES && isRetryableError(err);

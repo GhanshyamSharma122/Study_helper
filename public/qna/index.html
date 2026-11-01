@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Q&A Practice — QuizCraft AI</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 50%, #eef2ff 100%);
+      color: #1e293b;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 64px; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+    h1 { font-size: 26px; margin: 0; }
+    .sub { color: #64748b; margin: 4px 0 0; font-size: 14px; }
+    .btn { border: none; cursor: pointer; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 600; color: #fff; background: linear-gradient(90deg, #2563eb, #4f46e5); }
+    .btn:hover { filter: brightness(1.05); }
+    .btn.ghost { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
+    .btn.danger { background: #dc2626; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .card { background: rgba(255,255,255,.88); border: 1px solid rgba(148,163,184,.3); border-radius: 16px; padding: 20px; margin-bottom: 14px; box-shadow: 0 6px 24px rgba(15,23,42,.05); }
+    .q { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
+    .meta { font-size: 12px; color: #64748b; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .tab { padding: 8px 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; cursor: pointer; font-weight: 600; font-size: 14px; }
+    .tab.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .hidden { display: none !important; }
+    input, textarea, select { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 15px; font-family: inherit; }
+    textarea { min-height: 80px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .rowq { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 12px; padding: 12px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc; }
+    .progress { height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; margin: 14px 0 22px; }
+    .progress > div { height: 100%; background: linear-gradient(90deg,#2563eb,#4f46e5); transition: width .25s; }
+    .score { font-size: 22px; font-weight: 700; }
+    .missing { margin: 8px 0; }
+    .missing li { color: #991b1b; }
+    .feedback { color: #334155; margin-top: 8px; font-style: italic; }
+    .empty { text-align: center; padding: 40px 20px; color: #64748b; }
+    .mic { background: #16a34a; }
+    .mic.listening { background: #dc2626; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.6} }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    @media (max-width: 640px) {
+      .wrap { padding: 16px 14px 40px; }
+      header { flex-direction: column; align-items: flex-start; }
+      h1 { font-size: 22px; }
+      .row { grid-template-columns: 1fr; }
+      .actions .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Q&A Practice</h1>
+        <p class="sub">Open-ended questions. Type or speak your answer; AI scores it out of 10.</p>
+      </div>
+      <button class="btn ghost" onclick="location.href='/'">← Dashboard</button>
+    </header>
+
+    <div id="loading" class="empty">Loading…</div>
+
+    <!-- LIST VIEW -->
+    <div id="listView" class="hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h2 style="margin:0;font-size:20px;">Your Q&A Sets</h2>
+        <button class="btn" id="newSetBtn">+ New Set</button>
+      </div>
+      <div id="setList"></div>
+      <div id="emptySets" class="empty hidden">
+        <h2>No sets yet</h2>
+        <p>Create one to start practicing.</p>
+      </div>
+    </div>
+
+    <!-- CREATE / EDIT VIEW -->
+    <div id="formView" class="hidden">
+      <div class="card">
+        <h2 id="formTitle" style="margin:0 0 12px;">New Q&A Set</h2>
+        <div class="tabs">
+          <button class="tab active" data-tab="manual">Manual</button>
+          <button class="tab" data-tab="text">From Text</button>
+          <button class="tab" data-tab="pdf">From PDF</button>
+        </div>
+
+        <div class="row" style="margin-bottom:12px;">
+          <input id="fTitle" placeholder="Title" />
+          <input id="fSubject" placeholder="Subject" />
+        </div>
+
+        <!-- manual -->
+        <div id="tab-manual">
+          <div id="qRows"></div>
+          <button class="btn ghost" id="addRowBtn" style="margin-bottom:12px;">+ Add Question</button>
+        </div>
+        <!-- text -->
+        <div id="tab-text" class="hidden">
+          <textarea id="fText" placeholder="Paste source text here…" style="min-height:160px;"></textarea>
+          <div style="margin-top:8px;">
+            <label class="meta">Number of questions</label>
+            <input id="fCountText" type="number" min="1" max="50" value="5" style="max-width:120px;" />
+          </div>
+        </div>
+        <!-- pdf -->
+        <div id="tab-pdf" class="hidden">
+          <input id="fPdf" type="file" accept="application/pdf" />
+          <div style="margin-top:8px;">
+            <label class="meta">Number of questions</label>
+            <input id="fCountPdf" type="number" min="1" max="50" value="5" style="max-width:120px;" />
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn" id="saveSetBtn">Save Set</button>
+          <button class="btn ghost" id="cancelFormBtn">Cancel</button>
+        </div>
+        <p id="formMsg" class="meta" style="margin-top:10px;"></p>
+      </div>
+    </div>
+
+    <!-- PRACTICE VIEW -->
+    <div id="practiceView" class="hidden">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <h2 id="pSetTitle" style="margin:0;font-size:20px;"></h2>
+          <button class="btn ghost" id="quitPracticeBtn">Quit</button>
+        </div>
+        <div class="progress"><div id="pBar" style="width:0%"></div></div>
+        <p class="meta" id="pCounter"></p>
+        <p class="q" id="pQuestion"></p>
+        <textarea id="pAnswer" placeholder="Type your answer here, or use the microphone…"></textarea>
+        <div class="actions">
+          <button class="btn mic hidden" id="micBtn">🎤 Speak</button>
+          <button class="btn" id="submitBtn">Submit Answer</button>
+        </div>
+        <div id="pResult" class="hidden" style="margin-top:14px;">
+          <p class="score" id="pScore"></p>
+          <p class="meta" id="pMissingLabel"></p>
+          <ul class="missing" id="pMissing"></ul>
+          <p class="feedback" id="pFeedback"></p>
+          <button class="btn" id="nextBtn" style="margin-top:10px;">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- DONE VIEW -->
+    <div id="doneView" class="hidden" class="empty">
+      <div class="card" style="text-align:center;">
+        <h2>Practice complete!</h2>
+        <p id="doneText" style="font-size:18px;"></p>
+        <button class="btn" onclick="location.reload()">Back to Sets</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = "http://localhost:8000/api/v1/qna";
+    const getUserId = () => {
+      let id = localStorage.getItem("study-helper-uid");
+      if (!id) {
+        id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random().toString(36).slice(2));
+        localStorage.setItem("study-helper-uid", id);
+      }
+      return id;
+    };
+    const uid = getUserId();
+    const authHeaders = { "Content-Type": "application/json", "x-user-id": uid };
+
+    const $ = (id) => document.getElementById(id);
+    let sets = [];
+    let editingId = null;
+    let activeSet = null;
+    let qIndex = 0;
+    let results = [];
+    let currentTab = "manual";
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+    }
+
+    async function loadSets() {
+      const res = await fetch(API);
+      const data = await res.json();
+      sets = data.data || [];
+    }
+
+    function renderSets() {
+      const list = $("setList");
+      list.innerHTML = "";
+      if (!sets.length) { $("emptySets").classList.remove("hidden"); return; }
+      $("emptySets").classList.add("hidden");
+      sets.forEach((s) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <p class="q">${escapeHtml(s.title)} <span class="meta">· ${escapeHtml(s.subject)} · ${s.questions.length} Qs</span></p>
+          <div class="actions">
+            <button class="btn" data-act="practice" data-id="${s._id}">Practice</button>
+            <button class="btn ghost" data-act="edit" data-id="${s._id}">Edit</button>
+            <button class="btn danger" data-act="delete" data-id="${s._id}">Delete</button>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+      list.querySelectorAll("button").forEach((b) => {
+        b.onclick = () => {
+          const id = b.dataset.id;
+          if (b.dataset.act === "practice") startPractice(id);
+          if (b.dataset.act === "edit") openEdit(id);
+          if (b.dataset.act === "delete") deleteSet(id);
+        };
+      });
+    }
+
+    async function deleteSet(id) {
+      if (!confirm("Delete this set?")) return;
+      await fetch(API + "/" + id, { method: "DELETE" });
+      await loadSets();
+      renderSets();
+    }
+
+    // ---- form ----
+    function showForm(edit) {
+      $("listView").classList.add("hidden");
+      $("formView").classList.remove("hidden");
+      $("formTitle").textContent = edit ? "Edit Q&A Set" : "New Q&A Set";
+    }
+    function hideForm() {
+      $("formView").classList.add("hidden");
+      $("listView").classList.remove("hidden");
+      editingId = null;
+      resetForm();
+    }
+    function resetForm() {
+      $("fTitle").value = "";
+      $("fSubject").value = "";
+      $("fText").value = "";
+      $("qRows").innerHTML = "";
+      addRow();
+      $("formMsg").textContent = "";
+    }
+    function addRow(q, a) {
+      const div = document.createElement("div");
+      div.className = "rowq";
+      div.innerHTML = `
+        <textarea placeholder="Question">${q ? escapeHtml(q) : ""}</textarea>
+        <textarea placeholder="Reference answer">${a ? escapeHtml(a) : ""}</textarea>
+        <button class="btn ghost" style="justify-self:start;padding:6px 12px;">Remove</button>
+      `;
+      div.querySelector("button").onclick = () => div.remove();
+      $("qRows").appendChild(div);
+    }
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+      ["manual","text","pdf"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== tab));
+    }
+    document.querySelectorAll(".tab").forEach((t) => t.onclick = () => switchTab(t.dataset.tab));
+
+    async function openEdit(id) {
+      const set = sets.find((s) => s._id === id);
+      if (!set) return;
+      editingId = id;
+      $("fTitle").value = set.title;
+      $("fSubject").value = set.subject;
+      $("qRows").innerHTML = "";
+      set.questions.forEach((q) => addRow(q.question, q.answer));
+      if (!set.questions.length) addRow();
+      switchTab("manual");
+      showForm(true);
+    }
+
+    async function saveSet() {
+      const title = $("fTitle").value.trim();
+      const subject = $("fSubject").value.trim();
+      if (!title || !subject) { $("formMsg").textContent = "Title and subject required."; return; }
+
+      if (currentTab === "manual") {
+        const rows = [...$("qRows").children];
+        const questions = rows.map((r) => {
+          const tas = r.querySelectorAll("textarea");
+          return { question: tas[0].value.trim(), answer: tas[1].value.trim() };
+        }).filter((q) => q.question && q.answer);
+        if (!questions.length) { $("formMsg").textContent = "Add at least one question with answer."; return; }
+        const body = { title, subject, questions };
+        const url = editingId ? API + "/" + editingId : API + "/manual";
+        const method = editingId ? "PUT" : "POST";
+        const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!res.ok) { $("formMsg").textContent = "Save failed."; return; }
+      } else if (currentTab === "text") {
+        const text = $("fText").value.trim();
+        if (!text) { $("formMsg").textContent = "Paste some text."; return; }
+        const count = Number($("fCountText").value) || 5;
+        const res = await fetch(API + "/text", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, subject, text, numberOfQuestions: count }),
+        });
+        if (!res.ok) { $("formMsg").textContent = "Generation failed."; return; }
+      } else {
+        const file = $("fPdf").files[0];
+        if (!file) { $("formMsg").textContent = "Choose a PDF."; return; }
+        const count = Number($("fCountPdf").value) || 5;
+        const fd = new FormData();
+        fd.append("pdf_file", file);
+        fd.append("title", title);
+        fd.append("subject", subject);
+        fd.append("numberOfQuestions", count);
+        const res = await fetch(API + "/pdf", { method: "POST", body: fd });
+        if (!res.ok) { $("formMsg").textContent = "Generation failed."; return; }
+      }
+
+      $("formMsg").textContent = "Saved!";
+      await loadSets();
+      hideForm();
+      renderSets();
+    }
+
+    // ---- practice ----
+    function startPractice(id) {
+      activeSet = sets.find((s) => s._id === id);
+      if (!activeSet) return;
+      qIndex = 0;
+      results = [];
+      $("listView").classList.add("hidden");
+      $("practiceView").classList.remove("hidden");
+      $("pSetTitle").textContent = activeSet.title;
+      showQuestion();
+    }
+    function showQuestion() {
+      const q = activeSet.questions[qIndex];
+      $("pBar").style.width = (qIndex / activeSet.questions.length * 100) + "%";
+      $("pCounter").textContent = `Question ${qIndex + 1} of ${activeSet.questions.length}`;
+      $("pQuestion").textContent = q.question;
+      $("pAnswer").value = "";
+      $("pResult").classList.add("hidden");
+      $("submitBtn").disabled = false;
+      $("submitBtn").textContent = "Submit Answer";
+    }
+    async function submitAnswer() {
+      const q = activeSet.questions[qIndex];
+      const userAnswer = $("pAnswer").value.trim();
+      $("submitBtn").disabled = true;
+      $("submitBtn").textContent = "Grading…";
+      const res = await fetch(API + "/" + activeSet._id + "/score", {
+        method: "POST", headers: authHeaders,
+        body: JSON.stringify({ questionIndex: qIndex, userAnswer }),
+      });
+      const data = await res.json();
+      const r = data.data;
+      $("pScore").textContent = (r.score === null ? "—" : r.score) + " / 10";
+      $("pMissing").innerHTML = (r.missing || []).map((m) => "<li>" + escapeHtml(m) + "</li>").join("");
+      $("pMissingLabel").textContent = (r.missing && r.missing.length) ? "Missing:" : "";
+      $("pFeedback").textContent = r.feedback || "";
+      $("pResult").classList.remove("hidden");
+      results.push(r.score);
+    }
+    function nextQuestion() {
+      qIndex++;
+      if (qIndex >= activeSet.questions.length) { finishPractice(); return; }
+      showQuestion();
+    }
+    function finishPractice() {
+      $("practiceView").classList.add("hidden");
+      $("doneView").classList.remove("hidden");
+      const valid = results.filter((s) => typeof s === "number");
+      const avg = valid.length ? (valid.reduce((a,b)=>a+b,0)/valid.length).toFixed(1) : "—";
+      $("doneText").textContent = `Average score: ${avg} / 10 across ${results.length} answer(s).`;
+    }
+
+    // ---- speech ----
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let listening = false;
+    if (SR) {
+      $("micBtn").classList.remove("hidden");
+      recognition = new SR();
+      recognition.lang = "en-US";
+      recognition.interimResults = true;
+      recognition.continuous = false;
+      recognition.onresult = (e) => {
+        let transcript = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          transcript += e.results[i][0].transcript;
+        }
+        const ta = $("pAnswer");
+        // append final only
+        if (e.results[e.results.length-1].isFinal) {
+          ta.value = (ta.value + " " + transcript).trim();
+        }
+      };
+      recognition.onend = () => {
+        listening = false;
+        $("micBtn").classList.remove("listening");
+        $("micBtn").textContent = "🎤 Speak";
+      };
+      recognition.onerror = (e) => {
+        listening = false;
+        $("micBtn").classList.remove("listening");
+        $("micBtn").textContent = "🎤 Speak";
+        if (e.error === "not-allowed") alert("Microphone permission denied.");
+      };
+      $("micBtn").onclick = () => {
+        if (listening) { recognition.stop(); return; }
+        listening = true;
+        $("micBtn").classList.add("listening");
+        $("micBtn").textContent = "⏹ Stop";
+        try { recognition.start(); } catch (e) { listening = false; }
+      };
+    }
+
+    // ---- wiring ----
+    $("newSetBtn").onclick = () => { resetForm(); editingId = null; showForm(false); };
+    $("cancelFormBtn").onclick = hideForm;
+    $("addRowBtn").onclick = () => addRow();
+    $("saveSetBtn").onclick = saveSet;
+    $("submitBtn").onclick = submitAnswer;
+    $("nextBtn").onclick = nextQuestion;
+    $("quitPracticeBtn").onclick = () => {
+      $("practiceView").classList.add("hidden");
+      $("listView").classList.remove("hidden");
+    };
+
+    (async function init() {
+      try {
+        await loadSets();
+      } catch (e) {
+        $("loading").textContent = "Could not reach the server. Is it running on localhost:8000?";
+        return;
+      }
+      $("loading").classList.add("hidden");
+      $("listView").classList.remove("hidden");
+      renderSets();
+    })();
+  </script>
+</body>
+</html>
