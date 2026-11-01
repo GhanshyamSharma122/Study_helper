@@ -85,6 +85,7 @@
         <h2 id="formTitle" style="margin:0 0 12px;">New Q&A Set</h2>
         <div class="tabs">
           <button class="tab active" data-tab="manual">Manual</button>
+          <button class="tab" data-tab="json">From JSON</button>
           <button class="tab" data-tab="text">From Text</button>
           <button class="tab" data-tab="pdf">From PDF</button>
         </div>
@@ -98,6 +99,17 @@
         <div id="tab-manual">
           <div id="qRows"></div>
           <button class="btn ghost" id="addRowBtn" style="margin-bottom:12px;">+ Add Question</button>
+        </div>
+        <!-- json -->
+        <div id="tab-json" class="hidden">
+          <input id="fJson" type="file" accept=".json,application/json" />
+          <p class="meta" style="margin:8px 0 0;">
+            Upload a JSON file containing either an array of questions or an object with a
+            <code>questions</code> array. Each question must have <code>question</code> and <code>answer</code> fields.
+          </p>
+          <pre class="meta" style="background:#f8fafc;padding:10px;border-radius:8px;overflow:auto;margin-top:8px;">[
+  { "question": "What is photosynthesis?", "answer": "The process plants use to convert light into chemical energy." }
+]</pre>
         </div>
         <!-- text -->
         <div id="tab-text" class="hidden">
@@ -281,6 +293,7 @@
       $("fTitle").value = "";
       $("fSubject").value = "";
       $("fText").value = "";
+      $("fJson").value = "";
       $("qRows").innerHTML = "";
       addRow();
       $("formMsg").textContent = "";
@@ -299,7 +312,7 @@
     function switchTab(tab) {
       currentTab = tab;
       document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
-      ["manual","text","pdf"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== tab));
+      ["manual","json","text","pdf"].forEach((t) => $("tab-" + t).classList.toggle("hidden", t !== tab));
     }
     document.querySelectorAll(".tab").forEach((t) => t.onclick = () => switchTab(t.dataset.tab));
 
@@ -317,9 +330,12 @@
     }
 
     async function saveSet() {
-      const title = $("fTitle").value.trim();
-      const subject = $("fSubject").value.trim();
-      if (!title || !subject) { $("formMsg").textContent = "Title and subject required."; return; }
+      let title = $("fTitle").value.trim();
+      let subject = $("fSubject").value.trim();
+      if (currentTab !== "json" && (!title || !subject)) {
+        $("formMsg").textContent = "Title and subject required.";
+        return;
+      }
 
       if (currentTab === "manual") {
         const rows = [...$("qRows").children];
@@ -329,6 +345,48 @@
         }).filter((q) => q.question && q.answer);
         if (!questions.length) { $("formMsg").textContent = "Add at least one question with answer."; return; }
         const body = { title, subject, questions };
+        const url = editingId ? API + "/" + editingId : API + "/manual";
+        const method = editingId ? "PUT" : "POST";
+        const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!res.ok) { $("formMsg").textContent = "Save failed."; return; }
+      } else if (currentTab === "json") {
+        const file = $("fJson").files[0];
+        if (!file) { $("formMsg").textContent = "Choose a JSON file."; return; }
+
+        let parsed;
+        try {
+          parsed = JSON.parse(await file.text());
+        } catch (e) {
+          $("formMsg").textContent = "The selected file is not valid JSON.";
+          return;
+        }
+
+        const questions = Array.isArray(parsed) ? parsed : parsed && parsed.questions;
+        if (!Array.isArray(questions) || !questions.length) {
+          $("formMsg").textContent = "JSON must contain a non-empty questions array.";
+          return;
+        }
+        const invalid = questions.find((q) => !q || typeof q.question !== "string" || !q.question.trim() || typeof q.answer !== "string" || !q.answer.trim());
+        if (invalid) {
+          $("formMsg").textContent = "Every question needs non-empty question and answer fields.";
+          return;
+        }
+        if (!title && parsed && !Array.isArray(parsed) && typeof parsed.title === "string") title = parsed.title.trim();
+        if (!subject && parsed && !Array.isArray(parsed) && typeof parsed.subject === "string") subject = parsed.subject.trim();
+        if (!title || !subject) {
+          $("formMsg").textContent = "Enter a title and subject, or include them in the JSON object.";
+          return;
+        }
+
+        const body = {
+          title,
+          subject,
+          questions: questions.map((q) => ({
+            question: q.question.trim(),
+            answer: q.answer.trim(),
+            ...(Array.isArray(q.keywords) ? { keywords: q.keywords.filter((k) => typeof k === "string").map((k) => k.trim()).filter(Boolean) } : {}),
+          })),
+        };
         const url = editingId ? API + "/" + editingId : API + "/manual";
         const method = editingId ? "PUT" : "POST";
         const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
