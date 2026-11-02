@@ -13,7 +13,7 @@ connectDB()
         console.log("error starting the server",error)
         throw error
     })
-    app.listen(process.env.PORT||8080,()=>{
+    app.listen(process.env.PORT||8080,"0.0.0.0",()=>{
         console.log(`server is running at port: ${process.env.PORT}`)
 
     })

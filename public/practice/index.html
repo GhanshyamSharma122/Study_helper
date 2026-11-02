@@ -48,6 +48,7 @@
     .empty { text-align: center; padding: 60px 20px; color: #64748b; }
     .empty h2 { color: #334155; margin: 12px 0 6px; }
     .actions { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; gap: 12px; }
+    .header-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
     .score { font-size: 18px; font-weight: 700; }
     .hidden { display: none !important; }
     @media (max-width: 640px) {
@@ -72,8 +73,10 @@
         <h1>Practice Mistakes</h1>
         <p class="sub">Re-attempt the questions you previously got wrong. Correct answers are removed automatically.</p>
       </div>
-      <button class="btn ghost" onclick="location.href='/'">← Back to Dashboard</button>
-      <button class="btn" onclick="location.href='/qna'">Q&A Practice →</button>
+      <div class="header-actions">
+        <button class="btn ghost" onclick="location.href='/'">← Back to Dashboard</button>
+        <button class="btn" onclick="location.href='/qna'">Q&A Practice →</button>
+      </div>
     </header>
 
     <div id="loading" class="empty">Loading your mistakes…</div>
@@ -112,7 +115,7 @@
   </div>
 
   <script>
-    const API = "http://localhost:8000/api/v1/mistakes";
+    const API = "/api/v1/mistakes";
     const PROGRESS_KEY = "practice-progress";
 
     const getUserId = () => {
@@ -296,7 +299,7 @@
       try {
         await loadMistakes();
       } catch (e) {
-        $("loading").textContent = "Could not reach the server. Is it running on localhost:8000?";
+        $("loading").textContent = "Could not reach the server at this address. Is the server running?";
         return;
       }
       $("loading").classList.add("hidden");

@@ -13,7 +13,10 @@ Student answer (may contain typos or speech-to-text errors): ${userAnswer}
 
 GRADING RULES:
 - Ignore minor spelling, grammar, and speech-to-text errors; judge conceptual coverage.
-- Score from 0 to 10 (integer) based on how well the student answer covers the key points.
+- Accept synonyms, equivalent terminology, and clear paraphrases when they preserve the meaning of the reference answer. Do not require the student to use the reference answer's exact wording.
+- Do not accept an answer merely because it is related to the topic: the required concept must still be present.
+- Penalize incorrect claims and missing essential concepts. Do not infer or assume a missing concept just because the answer mentions a related idea.
+- Score from 0 to 10 (integer) based on accurate conceptual coverage. Give near-full or full credit when the meaning is correct despite different terminology; reduce the score when important parts are missing or incorrect.
 - "missing" must list short phrases of key points/concepts from the reference that are NOT adequately covered. Empty array if none.
 - "feedback" is one short sentence of constructive feedback.
 

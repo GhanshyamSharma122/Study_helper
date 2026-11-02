@@ -39,6 +39,9 @@
     .missing { margin: 8px 0; }
     .missing li { color: #991b1b; }
     .feedback { color: #334155; margin-top: 8px; font-style: italic; }
+    .header-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+    .list-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .practice-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
     .empty { text-align: center; padding: 40px 20px; color: #64748b; }
     .mic { background: #16a34a; }
     .mic.listening { background: #dc2626; animation: pulse 1s infinite; }
@@ -50,6 +53,13 @@
       h1 { font-size: 22px; }
       .row { grid-template-columns: 1fr; }
       .actions .btn { width: 100%; }
+      .header-actions { width: 100%; flex-direction: column; }
+      .header-actions .btn { width: 100%; }
+      .list-heading, .practice-heading { align-items: stretch; flex-direction: column; }
+      .list-heading .btn, .practice-heading .btn { width: 100%; }
+      .card { padding: 16px; border-radius: 12px; }
+      .tabs { gap: 6px; }
+      .tab { flex: 1 1 calc(50% - 6px); }
     }
   </style>
 </head>
@@ -60,15 +70,17 @@
         <h1>Q&A Practice</h1>
         <p class="sub">Open-ended questions. Type or speak your answer; AI scores it out of 10.</p>
       </div>
-      <button class="btn ghost" onclick="location.href='/'">← Dashboard</button>
-      <button class="btn ghost" onclick="location.href='/practice'">Practice Mistakes →</button>
+      <div class="header-actions">
+        <button class="btn ghost" onclick="location.href='/'">← Dashboard</button>
+        <button class="btn ghost" onclick="location.href='/practice'">Practice Mistakes →</button>
+      </div>
     </header>
 
     <div id="loading" class="empty">Loading…</div>
 
     <!-- LIST VIEW -->
     <div id="listView" class="hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="list-heading">
         <h2 style="margin:0;font-size:20px;">Your Q&A Sets</h2>
         <button class="btn" id="newSetBtn">+ New Set</button>
       </div>
@@ -139,7 +151,7 @@
     <!-- PRACTICE VIEW -->
     <div id="practiceView" class="hidden">
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="practice-heading">
           <h2 id="pSetTitle" style="margin:0;font-size:20px;"></h2>
           <button class="btn ghost" id="quitPracticeBtn">Quit</button>
         </div>
@@ -183,7 +195,7 @@
   </div>
 
   <script>
-    const API = "http://localhost:8000/api/v1/qna";
+    const API = "/api/v1/qna";
     const getUserId = () => {
       let id = localStorage.getItem("study-helper-uid");
       if (!id) {
@@ -445,18 +457,26 @@
       const userAnswer = $("pAnswer").value.trim();
       $("submitBtn").disabled = true;
       $("submitBtn").textContent = "Grading…";
-      const res = await fetch(API + "/" + activeSet._id + "/score", {
-        method: "POST", headers: authHeaders,
-        body: JSON.stringify({ questionIndex: qIndex, userAnswer }),
-      });
-      const data = await res.json();
-      const r = data.data;
-      $("pScore").textContent = (r.score === null ? "—" : r.score) + " / 10";
-      $("pMissing").innerHTML = (r.missing || []).map((m) => "<li>" + escapeHtml(m) + "</li>").join("");
-      $("pMissingLabel").textContent = (r.missing && r.missing.length) ? "Missing:" : "";
-      $("pFeedback").textContent = r.feedback || "";
-      $("pResult").classList.remove("hidden");
-      results.push(r.score);
+      try {
+        const res = await fetch(API + "/" + activeSet._id + "/score", {
+          method: "POST", headers: authHeaders,
+          body: JSON.stringify({ questionIndex: qIndex, userAnswer }),
+        });
+        if (!res.ok) throw new Error("The server could not grade this answer.");
+        const data = await res.json();
+        const r = data.data;
+        $("pScore").textContent = (r.score === null ? "—" : r.score) + " / 10";
+        $("pMissing").innerHTML = (r.missing || []).map((m) => "<li>" + escapeHtml(m) + "</li>").join("");
+        $("pMissingLabel").textContent = (r.missing && r.missing.length) ? "Missing:" : "";
+        $("pFeedback").textContent = r.feedback || "";
+        $("pResult").classList.remove("hidden");
+        $("submitBtn").textContent = "Graded";
+        results.push(r.score);
+      } catch (e) {
+        $("submitBtn").disabled = false;
+        $("submitBtn").textContent = "Try Again";
+        $("pFeedback").textContent = e.message || "Could not grade this answer. Please try again.";
+      }
     }
     function nextQuestion() {
       qIndex++;
@@ -529,7 +549,7 @@
       try {
         await loadSets();
       } catch (e) {
-        $("loading").textContent = "Could not reach the server. Is it running on localhost:8000?";
+        $("loading").textContent = "Could not reach the server at this address. Is the server running?";
         return;
       }
       $("loading").classList.add("hidden");
