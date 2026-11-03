@@ -159,6 +159,11 @@
         <p class="meta" id="pCounter"></p>
         <p class="q" id="pQuestion"></p>
         <textarea id="pAnswer" placeholder="Type your answer here, or use the microphone…"></textarea>
+        <div class="actions" style="align-items:center;">
+          <input id="answerImage" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" style="max-width:320px;" />
+          <button class="btn ghost" id="extractAnswerBtn" type="button">Extract from image</button>
+        </div>
+        <p id="ocrStatus" class="meta" style="margin:8px 0 0;"></p>
         <div class="actions">
           <button class="btn mic hidden" id="micBtn">🎤 Speak</button>
           <button class="btn" id="submitBtn">Submit Answer</button>
@@ -448,6 +453,8 @@
       $("pCounter").textContent = `Question ${qIndex + 1} of ${activeSet.questions.length}`;
       $("pQuestion").textContent = q.question;
       $("pAnswer").value = "";
+      $("answerImage").value = "";
+      $("ocrStatus").textContent = "";
       $("pResult").classList.add("hidden");
       $("submitBtn").disabled = false;
       $("submitBtn").textContent = "Submit Answer";
@@ -476,6 +483,30 @@
         $("submitBtn").disabled = false;
         $("submitBtn").textContent = "Try Again";
         $("pFeedback").textContent = e.message || "Could not grade this answer. Please try again.";
+      }
+    }
+    async function extractAnswer() {
+      const file = $("answerImage").files[0];
+      if (!file) { $("ocrStatus").textContent = "Choose an image first."; return; }
+      if (file.size > 5 * 1024 * 1024) { $("ocrStatus").textContent = "Image must be 5 MB or smaller."; return; }
+      const button = $("extractAnswerBtn");
+      button.disabled = true;
+      button.textContent = "Reading…";
+      $("ocrStatus").textContent = "Extracting handwriting locally. The first request may take a while…";
+      try {
+        const form = new FormData();
+        form.append("answer_image", file);
+        form.append("questionIndex", String(qIndex));
+        const res = await fetch(API + "/" + activeSet._id + "/ocr", { method: "POST", body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || data.error || "Could not read the image.");
+        $("pAnswer").value = data.data.text;
+        $("ocrStatus").textContent = "Text extracted. Review it, then submit your answer.";
+      } catch (error) {
+        $("ocrStatus").textContent = error.message || "Could not read the image.";
+      } finally {
+        button.disabled = false;
+        button.textContent = "Extract from image";
       }
     }
     function nextQuestion() {
@@ -538,6 +569,7 @@
     $("addRowBtn").onclick = () => addRow();
     $("saveSetBtn").onclick = saveSet;
     $("submitBtn").onclick = submitAnswer;
+    $("extractAnswerBtn").onclick = extractAnswer;
     $("nextBtn").onclick = nextQuestion;
     $("closeHistoryBtn").onclick = () => $("historyModal").classList.add("hidden");
     $("quitPracticeBtn").onclick = () => {

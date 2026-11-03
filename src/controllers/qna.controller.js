@@ -7,6 +7,7 @@ import { QnAAttempt } from "../models/qnaAttempt.model.js";
 import { make_qna } from "../utils/qna_generator.js";
 import { score_answer } from "../utils/qna_scorer.js";
 import { extractTextFromPdf } from "../utils/extract_Text_pdf.js";
+import { extractTextFromImage } from "../utils/extract_text_image.js";
 
 const getUserId = (req) => {
   const userId = req.header("x-user-id");
@@ -184,6 +185,23 @@ const scoreAnswer = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, result, "scored"));
 });
 
+const extractAnswer = asyncHandler(async (req, res) => {
+  if (!req.file) throw new ApiError(400, "An answer image is required");
+  const set = await QnASet.findById(req.params.id);
+  if (!set) throw new ApiError(404, "qna set not found");
+  const questionIndex = Number(req.body.questionIndex);
+  if (!Number.isInteger(questionIndex) || !set.questions[questionIndex]) {
+    throw new ApiError(400, "invalid questionIndex");
+  }
+
+  try {
+    const text = await extractTextFromImage(req.file.buffer);
+    return res.status(200).json(new ApiResponse(200, { text }, "answer extracted"));
+  } catch (error) {
+    throw new ApiError(502, error.message || "Could not extract text from the image");
+  }
+});
+
 const getAttempts = asyncHandler(async (req, res) => {
   const userId = getUserId(req);
   const attempts = await QnAAttempt.find({ userId, setId: req.params.id })
@@ -202,5 +220,6 @@ export {
   deleteSet,
   addQuestions,
   scoreAnswer,
+  extractAnswer,
   getAttempts,
 };

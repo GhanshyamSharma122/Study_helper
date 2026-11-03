@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { upload } from "../middlewares/multer.middleware.js";
+import { upload, imageUpload } from "../middlewares/multer.middleware.js";
 import {
   getAllSets,
   getById,
@@ -10,6 +10,7 @@ import {
   deleteSet,
   addQuestions,
   scoreAnswer,
+  extractAnswer,
   getAttempts,
 } from "../controllers/qna.controller.js";
 
@@ -23,6 +24,7 @@ router.get("/:id", getById);
 router.put("/:id", updateSet);
 router.delete("/:id", deleteSet);
 router.post("/:id/questions", addQuestions);
+router.post("/:id/ocr", imageUpload.single("answer_image"), extractAnswer);
 router.post("/:id/score", scoreAnswer);
 router.get("/:id/attempts", getAttempts);
 
