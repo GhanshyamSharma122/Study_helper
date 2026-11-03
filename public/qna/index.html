@@ -47,6 +47,9 @@
     .mic.listening { background: #dc2626; animation: pulse 1s infinite; }
     @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.6} }
     .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    .crop-modal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(15,23,42,.7); }
+    .crop-dialog { width: min(820px, 100%); max-height: 95vh; overflow: auto; background: #fff; border-radius: 16px; padding: 18px; }
+    #cropCanvas { display: block; width: 100%; max-height: 65vh; object-fit: contain; background: #0f172a; border-radius: 10px; touch-action: none; cursor: crosshair; }
     @media (max-width: 640px) {
       .wrap { padding: 16px 14px 40px; }
       header { flex-direction: column; align-items: flex-start; }
@@ -178,6 +181,19 @@
       </div>
     </div>
 
+    <div id="cropModal" class="crop-modal hidden" role="dialog" aria-modal="true" aria-labelledby="cropTitle">
+      <div class="crop-dialog">
+        <h2 id="cropTitle" style="margin:0 0 6px;font-size:20px;">Crop answer image</h2>
+        <p class="meta" style="margin:0 0 12px;">Drag over the handwritten answer. If you do not select an area, the full image will be used.</p>
+        <canvas id="cropCanvas"></canvas>
+        <div class="actions">
+          <button class="btn" id="applyCropBtn" type="button">Use selected area</button>
+          <button class="btn ghost" id="useFullImageBtn" type="button">Use full image</button>
+          <button class="btn ghost" id="cancelCropBtn" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <!-- HISTORY MODAL -->
     <div id="historyModal" class="hidden" style="position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;">
       <div style="background:#fff;border-radius:16px;max-width:700px;width:100%;max-height:80vh;overflow:auto;padding:20px;">
@@ -219,6 +235,12 @@
     let qIndex = 0;
     let results = [];
     let currentTab = "manual";
+    let selectedAnswerImage = null;
+    let cropImage = null;
+    let cropScale = 1;
+    let cropRect = null;
+    let cropStart = null;
+    let cropping = false;
 
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
@@ -454,6 +476,7 @@
       $("pQuestion").textContent = q.question;
       $("pAnswer").value = "";
       $("answerImage").value = "";
+      selectedAnswerImage = null;
       $("ocrStatus").textContent = "";
       $("pResult").classList.add("hidden");
       $("submitBtn").disabled = false;
@@ -486,7 +509,7 @@
       }
     }
     async function extractAnswer() {
-      const file = $("answerImage").files[0];
+      const file = selectedAnswerImage || $("answerImage").files[0];
       if (!file) { $("ocrStatus").textContent = "Choose an image first."; return; }
       if (file.size > 5 * 1024 * 1024) { $("ocrStatus").textContent = "Image must be 5 MB or smaller."; return; }
       const button = $("extractAnswerBtn");
@@ -508,6 +531,69 @@
         button.disabled = false;
         button.textContent = "Extract from image";
       }
+    }
+
+    function canvasPoint(event) {
+      const canvas = $("cropCanvas");
+      const bounds = canvas.getBoundingClientRect();
+      return {
+        x: Math.max(0, Math.min(canvas.width, (event.clientX - bounds.left) * canvas.width / bounds.width)),
+        y: Math.max(0, Math.min(canvas.height, (event.clientY - bounds.top) * canvas.height / bounds.height)),
+      };
+    }
+    function drawCropCanvas() {
+      const canvas = $("cropCanvas");
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(cropImage, 0, 0, canvas.width, canvas.height);
+      if (!cropRect || cropRect.w < 2 || cropRect.h < 2) return;
+      ctx.fillStyle = "rgba(15,23,42,.58)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+      ctx.drawImage(cropImage, cropRect.x / cropScale, cropRect.y / cropScale, cropRect.w / cropScale, cropRect.h / cropScale, cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+    }
+    function openCropper(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        cropImage = new Image();
+        cropImage.onload = () => {
+          const canvas = $("cropCanvas");
+          cropScale = Math.min(1, 760 / cropImage.naturalWidth, 560 / cropImage.naturalHeight);
+          canvas.width = Math.max(1, Math.round(cropImage.naturalWidth * cropScale));
+          canvas.height = Math.max(1, Math.round(cropImage.naturalHeight * cropScale));
+          cropRect = null;
+          drawCropCanvas();
+          $("cropModal").classList.remove("hidden");
+        };
+        cropImage.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    }
+    function closeCropper() {
+      $("cropModal").classList.add("hidden");
+      cropImage = null;
+      cropRect = null;
+    }
+    function applyCrop(useFullImage) {
+      if (!cropImage) return;
+      if (useFullImage || !cropRect || cropRect.w < 10 || cropRect.h < 10) {
+        selectedAnswerImage = $("answerImage").files[0];
+        $("ocrStatus").textContent = "Full image selected.";
+        closeCropper();
+        return;
+      }
+      const source = document.createElement("canvas");
+      source.width = Math.round(cropRect.w / cropScale);
+      source.height = Math.round(cropRect.h / cropScale);
+      source.getContext("2d").drawImage(cropImage, cropRect.x / cropScale, cropRect.y / cropScale, source.width, source.height, 0, 0, source.width, source.height);
+      source.toBlob((blob) => {
+        selectedAnswerImage = new File([blob], "cropped-answer.png", { type: "image/png" });
+        $("ocrStatus").textContent = "Cropped image ready for extraction.";
+        closeCropper();
+      }, "image/png");
     }
     function nextQuestion() {
       qIndex++;
@@ -570,6 +656,27 @@
     $("saveSetBtn").onclick = saveSet;
     $("submitBtn").onclick = submitAnswer;
     $("extractAnswerBtn").onclick = extractAnswer;
+    $("answerImage").onchange = () => {
+      const file = $("answerImage").files[0];
+      selectedAnswerImage = file || null;
+      if (file) openCropper(file);
+    };
+    $("cropCanvas").onpointerdown = (event) => {
+      cropStart = canvasPoint(event);
+      cropRect = { x: cropStart.x, y: cropStart.y, w: 0, h: 0 };
+      cropping = true;
+      $("cropCanvas").setPointerCapture(event.pointerId);
+    };
+    $("cropCanvas").onpointermove = (event) => {
+      if (!cropping) return;
+      const point = canvasPoint(event);
+      cropRect = { x: Math.min(cropStart.x, point.x), y: Math.min(cropStart.y, point.y), w: Math.abs(point.x - cropStart.x), h: Math.abs(point.y - cropStart.y) };
+      drawCropCanvas();
+    };
+    $("cropCanvas").onpointerup = () => { cropping = false; };
+    $("applyCropBtn").onclick = () => applyCrop(false);
+    $("useFullImageBtn").onclick = () => applyCrop(true);
+    $("cancelCropBtn").onclick = closeCropper;
     $("nextBtn").onclick = nextQuestion;
     $("closeHistoryBtn").onclick = () => $("historyModal").classList.add("hidden");
     $("quitPracticeBtn").onclick = () => {
